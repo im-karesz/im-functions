@@ -1,0 +1,27 @@
+name: Build Plugin Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create plugin zip
+      run: |
+        PLUGIN_DIR="im-functions"
+        mkdir $PLUGIN_DIR
+        cp -r * $PLUGIN_DIR/
+        zip -r $PLUGIN_DIR.zip $PLUGIN_DIR
+
+    - name: Upload release asset
+      uses: softprops/action-gh-release@v2
+      with:
+        files: im-functions.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
