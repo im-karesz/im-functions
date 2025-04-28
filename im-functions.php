@@ -2,7 +2,7 @@
 /**
  * Plugin Name: IM Functions
  * Description: Öt funkcióval rendelkező bővítmény, amely lehetővé teszi az ACF admin címek testreszabását, a Google Docs-ból másolt tartalmak tisztítását, az elérhetőségi adatok elrejtését, az UTM követési sütik beállítását és az ACF képnevek frissítését Phoenix Media Rename használatakor.
- * Version: 1.7
+ * Version: 1.8
  * Author: Szente Károly
  * Author URI: https://iparimarketing.hu
  * License: GPL2
