@@ -15,8 +15,9 @@ jobs:
     - name: Create plugin zip
       run: |
         PLUGIN_DIR="im-functions"
-        mkdir $PLUGIN_DIR
-        cp -r * $PLUGIN_DIR/
+        mkdir -p $PLUGIN_DIR
+        # Másold az összes fájlt a plugin mappába, KIVÉVE magát a mappát
+        find . -maxdepth 1 ! -name "$PLUGIN_DIR" -exec cp -r {} $PLUGIN_DIR/ \;
         zip -r im-functions.zip $PLUGIN_DIR
 
     - name: Upload release asset
@@ -25,3 +26,4 @@ jobs:
         files: im-functions.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
