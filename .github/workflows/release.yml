@@ -17,7 +17,7 @@ jobs:
         PLUGIN_DIR="im-functions"
         mkdir $PLUGIN_DIR
         cp -r * $PLUGIN_DIR/
-        zip -r $PLUGIN_DIR.zip $PLUGIN_DIR
+        zip -r im-functions.zip $PLUGIN_DIR  # Csak `im-functions.zip` néven csomagolja!
 
     - name: Upload release asset
       uses: softprops/action-gh-release@v2
