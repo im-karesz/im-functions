@@ -47,7 +47,11 @@ if (!class_exists('IM_Functions_Updater')) {
         }
 
         public function plugin_info($res, $action, $args) {
-            if ($action !== 'plugin_information' || $args->slug !== dirname($this->plugin_slug)) {
+            if ($action !== 'plugin_information') {
+                return $res;
+            }
+
+            if ($args->slug !== dirname($this->plugin_slug)) {
                 return $res;
             }
 
@@ -93,7 +97,7 @@ if (!class_exists('IM_Functions_Updater')) {
 
             $screen = get_current_screen();
             if (empty($screen) || $screen->base !== 'dashboard') {
-                return; // Csak dashboard oldalon jelenjen meg
+                return;
             }
 
             $release = $this->get_latest_release();
@@ -107,7 +111,7 @@ if (!class_exists('IM_Functions_Updater')) {
                 $update_url = admin_url('update-core.php');
 
                 echo '<div class="notice notice-success is-dismissible">';
-                echo '<p><strong>IM Functions:</strong> Új verzió érhető el (' . esc_html($latest_version) . '). ';
+                echo '<p><strong>IM Functions:</strong> Új verzió érhető el (' . esc_html($latest_version) . '). Frissíts, mert ez a srác tuti megint valami jó dolgot talált ki! ';
                 echo '<a href="' . esc_url($update_url) . '">Frissítés most</a>.</p>';
                 echo '</div>';
             }
@@ -115,6 +119,3 @@ if (!class_exists('IM_Functions_Updater')) {
     }
 
 }
-
-// Itt példányosítjuk az updater-t
-new IM_Functions_Updater(__FILE__, 'im-karesz', 'im-functions');
