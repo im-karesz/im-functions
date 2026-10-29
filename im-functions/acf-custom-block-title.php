@@ -11,15 +11,33 @@ function acf_custom_block_title($title, $field, $layout, $i) {
     $block_title = '';
 
     foreach ($fields as $field_name) {
-        $value = ($field_name == 'blokk' ? get_sub_field($field_name)['cim'] : get_sub_field($field_name));
-        if (!empty($value)) {
-            $block_title = $value;
-            break;
+        $value = get_sub_field($field_name);
+
+        // Ha nincs mező vagy a mező üres, ugorjuk át
+        if ($value === false || $value === null || $value === '') {
+            continue;
         }
+
+        // Ha "blokk" típus, és tömb, akkor 'cim'-et próbálunk kinyerni
+        if ($field_name === 'blokk' && is_array($value)) {
+            $value = $value['cim'] ?? '';
+            if (!$value) {
+                continue;
+            }
+        }
+
+        $block_title = $value;
+        break;
     }
 
+    // Ha hosszú szöveget rövidíteni kell
     if (in_array($field_name, ['szoveg_blokk', 'kiemelt_szoveg'])) {
-        $block_title = mb_strimwidth(wp_strip_all_tags($block_title), 0, 30, '...');
+        $block_title = wp_strip_all_tags($block_title);
+        if (function_exists('mb_strimwidth')) {
+            $block_title = mb_strimwidth($block_title, 0, 30, '...');
+        } else {
+            $block_title = substr($block_title, 0, 30) . '...';
+        }
     }
 
     $block_title = wp_strip_all_tags($block_title);
@@ -30,4 +48,3 @@ function acf_custom_block_title($title, $field, $layout, $i) {
 
     return $title;
 }
-?>

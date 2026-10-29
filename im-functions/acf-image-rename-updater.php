@@ -1,6 +1,7 @@
 <?php
 /**
- * ACF Image Rename Updater - Pontos fájlnév-cserével, cache törléssel, admin notice fix-szel
+ * ACF + Elementor Image Rename Updater
+ * Frissíti a fájlneveket az ACF mezőkben és az Elementor (vagy más) page builderek post_content mezőiben is
  */
 
 if (!defined('ABSPATH')) {
@@ -19,20 +20,21 @@ class ACF_Image_Rename_Updater {
     public static function update_all_meta_values($old_filename, $new_filename) {
         global $wpdb;
 
-        self::$updated_meta_count = 0; // reset
-        self::$cache_cleared = false;  // reset
+        self::$updated_meta_count = 0;
+        self::$cache_cleared = false;
 
-        error_log('--- ACF Image Rename Updater START ---');
+        error_log('--- ACF + Elementor Image Rename Updater START ---');
         error_log('Old filename: ' . $old_filename);
         error_log('New filename: ' . $new_filename);
 
-        // Fájltípusok, amiket kezelünk
+        // Kezelt kiterjesztések
         $extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf'];
 
         foreach ($extensions as $ext) {
             $old_full = $old_filename . '.' . $ext;
             $new_full = $new_filename . '.' . $ext;
 
+            // ACF mezők frissítése
             $meta_rows = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT meta_id, meta_value FROM {$wpdb->postmeta} WHERE meta_value LIKE %s",
@@ -62,19 +64,40 @@ class ACF_Image_Rename_Updater {
                     }
                 }
             }
+
+            // post_content (Elementor vagy más) frissítése
+            $elementor_posts = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT ID, post_content FROM {$wpdb->posts} WHERE post_content LIKE %s",
+                    '%' . $wpdb->esc_like($old_full) . '%'
+                )
+            );
+
+            if (!empty($elementor_posts)) {
+                foreach ($elementor_posts as $post) {
+                    $updated_content = str_replace($old_full, $new_full, $post->post_content);
+                    if ($updated_content !== $post->post_content) {
+                        wp_update_post([
+                            'ID' => $post->ID,
+                            'post_content' => $updated_content,
+                        ]);
+                        self::$updated_meta_count++;
+                        error_log("Updated post_content in post ID: {$post->ID}");
+                    }
+                }
+            }
         }
 
-        // Cache törlés
+        // Cache törlés, ha van elérhető cache plugin
         self::clear_cache();
 
-        // Admin notice adat eltárolása következő betöltésre
+        // Admin notice-hoz adat eltárolása
         set_transient('acf_image_rename_updater_notice', [
             'count' => self::$updated_meta_count,
             'cache' => self::$cache_cleared,
-        ], 60); // 1 percig él
-        
+        ], 60);
 
-        error_log('--- ACF Image Rename Updater END ---');
+        error_log('--- ACF + Elementor Image Rename Updater END ---');
     }
 
     private static function replace_in_meta_value($meta_value, $old_full, $new_full) {
@@ -119,7 +142,7 @@ class ACF_Image_Rename_Updater {
         if ($notice && !empty($notice['count'])) {
             ?>
             <div class="notice notice-success is-dismissible">
-                <p><strong>ACF Image Rename Updater:</strong> <?php echo intval($notice['count']); ?> helyen sikeresen cserélve. <?php echo $notice['cache'] ? 'Cache törölve.' : 'Cache nem került törlésre.'; ?></p>
+                <p><strong>ACF + Elementor Rename:</strong> <?php echo intval($notice['count']); ?> helyen sikeresen frissítve. <?php echo $notice['cache'] ? 'Cache törölve.' : 'Cache nem került törlésre.'; ?></p>
             </div>
             <?php
             delete_transient('acf_image_rename_updater_notice');

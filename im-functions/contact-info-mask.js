@@ -69,9 +69,9 @@ document.addEventListener('DOMContentLoaded', function() {
         element.removeAttribute('href');
 
         const gradientOverlay = `
-            linear-gradient(to right, 
-                ${originalColor} 0%, 
-                ${originalColor} 40%, 
+            linear-gradient(to right,
+                ${originalColor} 0%,
+                ${originalColor} 40%,
                 rgba(255, 255, 255, 0) 100%)`;
 
         element.style.backgroundImage = gradientOverlay;

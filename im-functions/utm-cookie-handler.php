@@ -1,76 +1,155 @@
 <?php
 /**
- * UTM paraméterek tárolása sütiben és hozzáadása a Contact Form 7 emailhez shortcode használatával
+ * UTM, GCLID és User Journey (Bejárt útvonal) tárolása sessionStorage-ban és sütikben
+ * Instant Head Execution & CookieScript kompatibilis kiadás
  */
 
-// UTM paraméterek tárolása sütiben
-function utm_store_in_cookie() {
-    if (isset($_GET['utm_source']) || isset($_GET['utm_medium']) || isset($_GET['utm_campaign']) || isset($_GET['utm_term']) || isset($_GET['utm_content'])) {
+// Kliens oldali (JS) tárolás futtatása az oldal legtetején (wp_head, 1-es prioritás)
+add_action('wp_head', function() {
+    if (is_admin()) return;
+    ?>
+    <script id="im-user-journey-tracker">
+    (function() {
+        try {
+            var utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid'];
+            var urlParams = new URLSearchParams(window.location.search);
 
-        $utm_params = array(
-            'utm_source'   => isset($_GET['utm_source']) ? sanitize_text_field($_GET['utm_source']) : '',
-            'utm_medium'   => isset($_GET['utm_medium']) ? sanitize_text_field($_GET['utm_medium']) : '',
-            'utm_campaign' => isset($_GET['utm_campaign']) ? sanitize_text_field($_GET['utm_campaign']) : '',
-            'utm_term'     => isset($_GET['utm_term']) ? sanitize_text_field($_GET['utm_term']) : '',
-            'utm_content'  => isset($_GET['utm_content']) ? sanitize_text_field($_GET['utm_content']) : '',
-        );
-
-        $domain = parse_url(home_url(), PHP_URL_HOST);
-        $path = COOKIEPATH;
-
-        foreach ($utm_params as $key => $value) {
-            if (!empty($value)) {
-                if (headers_sent()) {
-                    error_log("A fejlécek már elküldésre kerültek.");
-                } else {
-                    // Secure=true beállítása, mivel az oldal HTTPS-en fut
-                    setcookie($key, $value, time() + 30 * DAY_IN_SECONDS, $path, $domain, true, true); // Secure=True, HttpOnly=True
-                    error_log("Süti létrehozva: " . $key . " = " . $value);
+            // 1. MENTÉS SESSIONSTORAGE-BA (Azonnal az URL-ből)
+            utmKeys.forEach(function(key) {
+                if (urlParams.has(key)) {
+                    var val = urlParams.get(key);
+                    if (val) {
+                        sessionStorage.setItem('im_' + key, val);
+                    }
                 }
-            }
-        }
-    } else {
-        error_log("Nincs UTM paraméter a URL-ben");
-    }
-}
-add_action('init', 'utm_store_in_cookie');
+            });
 
-// Shortcode létrehozása az UTM sütik megjelenítéséhez (csak a nem üres paramétereket mutatja)
+            // 2. USER JOURNEY RÖGZÍTÉSE
+            var currentPath = window.location.pathname;
+            var pathHistory = [];
+            try {
+                pathHistory = JSON.parse(sessionStorage.getItem('im_user_journey') || '[]');
+            } catch(e) { pathHistory = []; }
+
+            if (!Array.isArray(pathHistory)) pathHistory = [];
+
+            if (pathHistory.length === 0 || pathHistory[pathHistory.length - 1] !== currentPath) {
+                pathHistory.push(currentPath);
+                if (pathHistory.length > 10) pathHistory.shift();
+                sessionStorage.setItem('im_user_journey', JSON.stringify(pathHistory));
+            }
+
+            // 3. AZONNALI SÜTI KIÍRÁS (Azonnal lefut a <head>-ben, 0 másodperc csúszással)
+            function writeCookiesNow() {
+                try {
+                    var historyArr = [];
+                    try { historyArr = JSON.parse(sessionStorage.getItem('im_user_journey') || '[]'); } catch(e){}
+                    var formattedJourney = Array.isArray(historyArr) ? historyArr.join(' -> ') : '';
+
+                    if (formattedJourney) {
+                        document.cookie = "im_user_journey=" + encodeURIComponent(formattedJourney) + "; path=/; max-age=86400; SameSite=Lax";
+                    }
+
+                    utmKeys.forEach(function(key) {
+                        var storedVal = sessionStorage.getItem('im_' + key);
+                        if (storedVal) {
+                            document.cookie = "im_" + key + "=" + encodeURIComponent(storedVal) + "; path=/; max-age=86400; SameSite=Lax";
+                        }
+                    });
+                } catch(e) {}
+            }
+
+            // Azonnal kiírjuk a sütiket a lapbetöltés 0. pillanatában
+            writeCookiesNow();
+
+            // 4. FORM MEZŐK KITÖLTÉSE ÉS ESEMÉNYEK (DOMReady után)
+            function syncAll() {
+                writeCookiesNow();
+                try {
+                    var historyArr = [];
+                    try { historyArr = JSON.parse(sessionStorage.getItem('im_user_journey') || '[]'); } catch(e){}
+                    var formattedJourney = Array.isArray(historyArr) ? historyArr.join(' -> ') : '';
+
+                    var journeyTargets = document.querySelectorAll('#user_journey, #utvonal_elso, #utvonal_masodik, input[name="user_journey"], input[name="fields[utvonal_elso]"], input[name="fields[utvonal_masodik]"], .bejart-utvonal-field');
+                    journeyTargets.forEach(function(input) { input.value = formattedJourney; });
+
+                    utmKeys.forEach(function(key) {
+                        var storedVal = sessionStorage.getItem('im_' + key);
+                        if (storedVal) {
+                            var utmTargets = document.querySelectorAll('#' + key + ', input[name="' + key + '"], input[name="fields[' + key + ']"]');
+                            utmTargets.forEach(function(input) { input.value = storedVal; });
+                        }
+                    });
+                } catch(e) {}
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', syncAll);
+            } else {
+                syncAll();
+            }
+
+            // Biztonsági hálók kattintásnál és form beküldésnél
+            document.addEventListener('click', function() { setTimeout(writeCookiesNow, 100); }, true);
+            document.addEventListener('submit', syncAll, true);
+            document.addEventListener('wpcf7beforesubmit', syncAll, true);
+
+        } catch(globalErr) {
+            console.error('IM Tracking Error:', globalErr);
+        }
+    })();
+    </script>
+    <?php
+}, 1);
+
+// Shortcode: UTM paraméterek megjelenítése
 function utm_params_shortcode() {
+    $utm_keys = array('utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content');
     $utm_data = '';
 
-    // UTM sütik beolvasása
-    if (isset($_COOKIE['utm_source']) || isset($_COOKIE['utm_medium']) || isset($_COOKIE['utm_campaign']) || isset($_COOKIE['utm_term']) || isset($_COOKIE['utm_content'])) {
+    foreach ($utm_keys as $key) {
+        $val = '';
+        if (isset($_COOKIE['im_' . $key])) {
+            $val = sanitize_text_field(urldecode($_COOKIE['im_' . $key]));
+        } elseif (isset($_COOKIE[$key])) {
+            $val = sanitize_text_field(urldecode($_COOKIE[$key]));
+        }
 
-        // Csak akkor adjuk hozzá a sorokat, ha az érték nem üres
-        if (!empty($_COOKIE['utm_source'])) {
-            $utm_data .= "UTM Source: " . sanitize_text_field($_COOKIE['utm_source']) . "\n";
+        if (!empty($val)) {
+            $label = strtoupper(str_replace('_', ' ', $key));
+            $utm_data .= $label . ": " . $val . "\n";
         }
-        if (!empty($_COOKIE['utm_medium'])) {
-            $utm_data .= "UTM Medium: " . sanitize_text_field($_COOKIE['utm_medium']) . "\n";
-        }
-        if (!empty($_COOKIE['utm_campaign'])) {
-            $utm_data .= "UTM Campaign: " . sanitize_text_field($_COOKIE['utm_campaign']) . "\n";
-        }
-        if (!empty($_COOKIE['utm_term'])) {
-            $utm_data .= "UTM Term: " . sanitize_text_field($_COOKIE['utm_term']) . "\n";
-        }
-        if (!empty($_COOKIE['utm_content'])) {
-            $utm_data .= "UTM Content: " . sanitize_text_field($_COOKIE['utm_content']) . "\n";
-        }
-    } else {
-        $utm_data = "Nincsenek UTM paraméterek.";
     }
 
-    // HTML törlés, hogy tisztán szövegként jelenjen meg
-    return $utm_data;
+    return !empty($utm_data) ? $utm_data : "Nincsenek UTM paraméterek.";
 }
 add_shortcode('utm_params', 'utm_params_shortcode');
 
-// A Contact Form 7 email tartalmának szűrése, hogy a shortcode-ok működjenek
+// Shortcode: GCLID megjelenítése külön
+function gclid_param_shortcode() {
+    $gclid_val = '';
+    if (isset($_COOKIE['im_gclid'])) {
+        $gclid_val = sanitize_text_field(urldecode($_COOKIE['im_gclid']));
+    } elseif (isset($_COOKIE['gclid'])) {
+        $gclid_val = sanitize_text_field(urldecode($_COOKIE['gclid']));
+    }
+
+    return !empty($gclid_val) ? "GCLID: " . $gclid_val : "Nincs GCLID.";
+}
+add_shortcode('gclid_param', 'gclid_param_shortcode');
+
+// Shortcode: User Journey (Bejárt útvonal) megjelenítése
+function user_journey_shortcode() {
+    if (isset($_COOKIE['im_user_journey']) && !empty($_COOKIE['im_user_journey'])) {
+        return sanitize_text_field(urldecode($_COOKIE['im_user_journey']));
+    }
+    return "Közvetlen látogatás / Nincs előzmény";
+}
+add_shortcode('user_journey', 'user_journey_shortcode');
+
+// CF7 Email Shortcode támogatás
 add_filter('wpcf7_mail_components', 'process_utm_shortcode_in_email', 10, 1);
 function process_utm_shortcode_in_email($components) {
-    // Shortcode-ok feldolgozása az email törzsében
     if (isset($components['body'])) {
         $components['body'] = do_shortcode($components['body']);
     }
